@@ -1,246 +1,294 @@
 #!/usr/bin/env nextflow
 
-// Developer notes
-//
-// This template workflow provides a basic structure to copy in order
-// to create a new workflow. Current recommended practices are:
-//     i) create a simple command-line interface.
-//    ii) include an abstract workflow scope named "pipeline" to be used
-//        in a module fashion
-//   iii) a second concrete, but anonymous, workflow scope to be used
-//        as an entry point when using this workflow in isolation.
-
 import groovy.json.JsonBuilder
 nextflow.enable.dsl = 2
 
-include { fastq_ingress; xam_ingress } from './lib/ingress'
 include {
     getParams;
 } from './lib/common'
 
 
-OPTIONAL_FILE = file("$projectDir/data/OPTIONAL_FILE")
-
 process getVersions {
-    label "wftemplate"
-    // Note that some wfs can modify this file to add other tools' version.
-    // Add the publishDir directive in the latest one.
+    label "wfbackup"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
     output:
         path "versions.txt"
     script:
     """
-    python -c "import pysam; print(f'pysam,{pysam.__version__}')" >> versions.txt
-    fastcat --version | sed 's/^/fastcat,/' >> versions.txt
+    echo "rsync,$(rsync --version | head -1)" >> versions.txt
+    """
+}
+
+
+process backupOntData {
+    label "wfbackup"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_ont_data.json"
+    cpus 1
+    memory "1 GB"
+
+    input:
+        val source_path
+        val dest_path
+        val delete_source
+
+    output:
+        path "manifest_ont_data.json", emit: manifest
+        path "backup_ont.log", emit: log
+        val true, emit: success
+
+    script:
+    String dest_dir = "${dest_path}/ont_data"
+    """
+    mkdir -p "$dest_dir"
+
+    echo "Starting ONT data backup..." > backup_ont.log
+    echo "Source: $source_path" >> backup_ont.log
+    echo "Destination: $dest_dir" >> backup_ont.log
+    echo "" >> backup_ont.log
+
+    echo "Step 1: Initial rsync copy (excluding pod5)..." >> backup_ont.log
+    rsync -av --exclude='pod5' "$source_path/" "$dest_dir/" >> backup_ont.log 2>&1
+    RSYNC_INIT_EXIT=\$?
+
+    if [ \$RSYNC_INIT_EXIT -ne 0 ]; then
+        echo "ERROR: Initial rsync failed with exit code \$RSYNC_INIT_EXIT" >> backup_ont.log
+        exit 1
+    fi
+    echo "Initial copy completed successfully." >> backup_ont.log
+    echo "" >> backup_ont.log
+
+    echo "Step 2: Verification rsync with checksum..." >> backup_ont.log
+    rsync -avc --checksum "$source_path/" "$dest_dir/" >> backup_ont.log 2>&1
+    RSYNC_VERIFY_EXIT=\$?
+
+    if [ \$RSYNC_VERIFY_EXIT -ne 0 ]; then
+        echo "ERROR: Verification rsync failed with exit code \$RSYNC_VERIFY_EXIT" >> backup_ont.log
+        exit 1
+    fi
+    echo "Verification completed successfully." >> backup_ont.log
+    echo "" >> backup_ont.log
+
+    echo "Step 3: Generating manifest..." >> backup_ont.log
+    find "$dest_dir" -type f -exec md5sum {} \; | awk '{print \$1, \$2}' | python3 -c '
+import sys, json
+files = []
+for line in sys.stdin:
+    checksum, path = line.strip().split(" ", 1)
+    files.append({"checksum": checksum, "path": path})
+print(json.dumps({"backup_type": "ont_data", "files": files, "total_files": len(files)}, indent=2))
+' > manifest_ont_data.json
+    echo "Manifest created." >> backup_ont.log
+    echo "" >> backup_ont.log
+
+    if [ "$delete_source" = "true" ]; then
+        echo "Step 4: Deleting source files (backup verified)..." >> backup_ont.log
+        rsync -av --exclude='pod5' --delete "$source_path/" /tmp/ont_backup_temp/ >> backup_ont.log 2>&1
+        rm -rf "$source_path"
+        echo "Source files deleted." >> backup_ont.log
+    else
+        echo "Step 4: Skipping source deletion (delete_source=false)." >> backup_ont.log
+    fi
+
+    echo "ONT backup completed successfully!" >> backup_ont.log
+    """
+}
+
+
+process backupEpi2meData {
+    label "wfbackup"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_epi2me_data.json"
+    cpus 1
+    memory "1 GB"
+
+    input:
+        val source_path
+        val dest_path
+        val delete_source
+
+    output:
+        path "manifest_epi2me_data.json", emit: manifest
+        path "backup_epi2me.log", emit: log
+        val true, emit: success
+
+    script:
+    String dest_dir = "${dest_path}/epi2me_data"
+    """
+    mkdir -p "$dest_dir"
+
+    echo "Starting EPI2ME data backup..." > backup_epi2me.log
+    echo "Source: $source_path" >> backup_epi2me.log
+    echo "Destination: $dest_dir" >> backup_epi2me.log
+    echo "" >> backup_epi2me.log
+
+    echo "Step 1: Initial rsync copy (first-level files only)..." >> backup_epi2me.log
+    rsync -av --include='*' --exclude='*/*' "$source_path/" "$dest_dir/" >> backup_epi2me.log 2>&1
+    RSYNC_INIT_EXIT=\$?
+
+    if [ \$RSYNC_INIT_EXIT -ne 0 ]; then
+        echo "ERROR: Initial rsync failed with exit code \$RSYNC_INIT_EXIT" >> backup_epi2me.log
+        exit 1
+    fi
+    echo "Initial copy completed successfully." >> backup_epi2me.log
+    echo "" >> backup_epi2me.log
+
+    echo "Step 2: Verification rsync with checksum..." >> backup_epi2me.log
+    rsync -avc --checksum --include='*' --exclude='*/*' "$source_path/" "$dest_dir/" >> backup_epi2me.log 2>&1
+    RSYNC_VERIFY_EXIT=\$?
+
+    if [ \$RSYNC_VERIFY_EXIT -ne 0 ]; then
+        echo "ERROR: Verification rsync failed with exit code \$RSYNC_VERIFY_EXIT" >> backup_epi2me.log
+        exit 1
+    fi
+    echo "Verification completed successfully." >> backup_epi2me.log
+    echo "" >> backup_epi2me.log
+
+    echo "Step 3: Generating manifest..." >> backup_epi2me.log
+    find "$dest_dir" -type f -maxdepth 1 -exec md5sum {} \; | awk '{print \$1, \$2}' | python3 -c '
+import sys, json
+files = []
+for line in sys.stdin:
+    checksum, path = line.strip().split(" ", 1)
+    files.append({"checksum": checksum, "path": path})
+print(json.dumps({"backup_type": "epi2me_data", "files": files, "total_files": len(files)}, indent=2))
+' > manifest_epi2me_data.json
+    echo "Manifest created." >> backup_epi2me.log
+    echo "" >> backup_epi2me.log
+
+    if [ "$delete_source" = "true" ]; then
+        echo "Step 4: Deleting source files (backup verified)..." >> backup_epi2me.log
+        rsync -av --include='*' --exclude='*/*' --delete "$source_path/" /tmp/epi2me_backup_temp/ >> backup_epi2me.log 2>&1
+        rm -rf "$source_path"
+        echo "Source files deleted." >> backup_epi2me.log
+    else
+        echo "Step 4: Skipping source deletion (delete_source=false)." >> backup_epi2me.log
+    fi
+
+    echo "EPI2ME backup completed successfully!" >> backup_epi2me.log
     """
 }
 
 
 process makeReport {
     label "wf_common"
-    publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-template*-report.html"
+    publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-backup-report.html"
     input:
-        // `analysis_group` can be `null`
-        tuple val(analysis_group), val(metadata), path(stats, stageAs: "stats_*")
-        path client_fields
+        path ont_manifest
+        path epi2me_manifest
+        path ont_log
+        path epi2me_log
         path "versions/*"
         path "params.json"
         val wf_version
+
     output:
-        path "wf-template-*.html"
+        path "wf-backup-report.html"
+
     script:
-        String report_name = analysis_group ? \
-            "wf-template-$analysis_group-report.html" : "wf-template-report.html"
-        String metadata = new JsonBuilder(metadata).toPrettyString().replaceAll("'", "'\\\\''")
-        String group_arg = analysis_group ? "--analysis_group $analysis_group" : ""
-        String stats_args = stats ? "--stats $stats" : ""
-        String client_fields_args = client_fields.name == OPTIONAL_FILE.name ? "" : "--client_fields $client_fields"
+    String ont_manifest_arg = ont_manifest.exists() ? "--ont_manifest $ont_manifest" : ""
+    String epi2me_manifest_arg = epi2me_manifest.exists() ? "--epi2me_manifest $epi2me_manifest" : ""
+    String ont_log_arg = ont_log.exists() ? "--ont_log $ont_log" : ""
+    String epi2me_log_arg = epi2me_log.exists() ? "--epi2me_log $epi2me_log" : ""
     """
-    echo '${metadata}' > metadata.json
-    workflow-glue report $report_name \
-        $group_arg \
+    workflow-glue report wf-backup-report.html \
+        $ont_manifest_arg \
+        $epi2me_manifest_arg \
+        $ont_log_arg \
+        $epi2me_log_arg \
         --versions versions \
-        $stats_args \
-        $client_fields_args \
         --params params.json \
-        --metadata metadata.json \
         --wf_version $wf_version
     """
 }
 
-// Use publishDir when possible in the process but this is for when is needed output
-// different files. E.g.: outputs from ingress processes or inputs provided by the user.
-// See https://github.com/nextflow-io/nextflow/issues/1636. This is the only way to
-// publish files from a workflow whilst decoupling the publish from the process steps.
-// The process takes a tuple containing the filename and the name of a sub-directory to
-// put the file into. If the latter is `null`, puts it into the top-level directory.
-process publish {
-    // publish inputs to output directory
-    label "wftemplate"
-    publishDir (
-        params.out_dir,
-        mode: "copy",
-        saveAs: { dirname ? "$dirname/$fname" : fname }
-    )
-    input:
-        tuple path(fname), val(dirname)
-    output:
-        path fname
-    """
-    echo "Writing output files"
-    """
-}
 
-// Creates a new directory named after the sample alias and moves the ingress results
-// into it.
-process collectIngressResultsInDir {
-    label "wftemplate"
-    input:
-        // both inputs might be `OPTIONAL_FILE` --> stage in different sub-directories
-        // to avoid name collisions
-        tuple val(meta),
-            path(reads, stageAs: "reads/*"),
-            path(index, stageAs: "index/*"),
-            path(stats, stageAs: "stats/*")
-    output:
-        // use sub-dir to avoid name clashes (in the unlikely event of a sample alias
-        // being `reads` or `stats`)
-        path "out/*"
-    script:
-    String outdir = "out/${meta["alias"].replaceAll("'", "'\\\\''")}"
-    String metaJson = new JsonBuilder(meta).toPrettyString().replaceAll("'", "'\\\\''")
-    String reads = reads.fileName.name == OPTIONAL_FILE.name ? "" : reads
-    String index = index.fileName.name == OPTIONAL_FILE.name ? "" : index
-    String stats = stats.fileName.name == OPTIONAL_FILE.name ? "" : stats
-    """
-    mkdir -p '$outdir'
-    echo '$metaJson' > metamap.json
-    mv metamap.json $reads $stats $index '$outdir'
-    """
-}
-
-// workflow module
 workflow pipeline {
     take:
-        reads
-    main:
-        // fastq_ingress doesn't have the index; add one extra null for compatibility.
-        // We do not use variable name as assigning variable name with a tuple
-        // not matching (e.g. meta, bam, bai, stats <- [meta, bam, stats]) causes
-        // the workflow to crash.
-        reads = reads
-        .map{
-            it.size() == 4 ? it : [it[0], it[1], null, it[2]]
-        }
+        ont_data_input
+        epi2me_data_input
 
-        client_fields = params.client_fields && file(params.client_fields).exists() ? file(params.client_fields) : OPTIONAL_FILE
+    main:
         software_versions = getVersions()
         workflow_params = getParams()
 
-        for_report = reads
-        | map { meta, path, index, stats ->
-            // keep track of whether a sample has stats (since it's possible that there
-            // are are samples that only occurred in the sample sheet but didn't have
-            // any reads)
-            [meta.analysis_group, meta + [has_stats: stats as boolean], stats]
-        }
-        | groupTuple
-        | map { analysis_group, metas, stats ->
-            // get rid of `null` entries from the stats list (the process will still
-            // launch if the list is empty)
-            [analysis_group, metas, stats - null]
+        ont_results = null
+        epi2me_results = null
+
+        if (ont_data_input) {
+            ont_results = backupOntData(
+                ont_data_input.source,
+                ont_data_input.dest,
+                params.delete_source
+            )
         }
 
+        if (epi2me_data_input) {
+            epi2me_results = backupEpi2meData(
+                epi2me_data_input.source,
+                epi2me_data_input.dest,
+                params.delete_source
+            )
+        }
+
+        ont_manifest = ont_results ? ont_results.manifest : file("$projectDir/data/OPTIONAL_FILE")
+        epi2me_manifest = epi2me_results ? epi2me_results.manifest : file("$projectDir/data/OPTIONAL_FILE")
+        ont_log = ont_results ? ont_results.log : file("$projectDir/data/OPTIONAL_FILE")
+        epi2me_log = epi2me_results ? epi2me_results.log : file("$projectDir/data/OPTIONAL_FILE")
+
         report = makeReport(
-            for_report,
-            client_fields,
+            ont_manifest,
+            epi2me_manifest,
+            ont_log,
+            epi2me_log,
             software_versions,
             workflow_params,
             workflow.manifest.version
         )
 
-        // replace `null` with path to optional file
-        reads
-        | map {
-            meta, path, index, stats ->
-            [ meta, path ?: OPTIONAL_FILE, index ?: OPTIONAL_FILE, stats ?: OPTIONAL_FILE ]
-        }
-        | collectIngressResultsInDir
     emit:
-        ingress_results = collectIngressResultsInDir.out
         report
-        // TODO: use something more useful as telemetry
         telemetry = workflow_params
 }
 
 
-// entrypoint workflow
 WorkflowMain.initialise(workflow, params, log)
-workflow {
 
+workflow {
     Pinguscript.ping_start(nextflow, workflow, params)
 
-    def samples
-    if (params.fastq) {
-        samples = fastq_ingress([
-            "input":params.fastq,
-            "sample":params.sample,
-            "sample_sheet":params.sample_sheet,
-            "analyse_unclassified":params.analyse_unclassified,
-            "analyse_fail":params.analyse_fail,
-            "stats": params.wf.fastcat_stats,
-            "fastcat_extra_args": "",
-            "required_sample_types": [],
-            "fastq_chunk": params.fastq_chunk,
-            "per_read_stats": params.wf.per_read_stats,
-            "allow_multiple_basecall_models": params.wf.allow_multiple_basecall_models,
-        ])
-    } else {
-        // if we didn't get a `--fastq`, there must have been a `--bam` (as is codified
-        // by the schema)
-        samples = xam_ingress([
-            "input":params.bam,
-            "sample":params.sample,
-            "sample_sheet":params.sample_sheet,
-            "analyse_unclassified":params.analyse_unclassified,
-            "analyse_fail":params.analyse_fail,
-            "keep_unaligned": params.wf.keep_unaligned,
-            "stats": params.wf.bamstats,
-            "return_fastq": params.wf.return_fastq,
-            "fastq_chunk": params.fastq_chunk,
-            "per_read_stats": params.wf.per_read_stats,
-            "allow_multiple_basecall_models": params.wf.allow_multiple_basecall_models,
-        ])
+    def ont_input = null
+    def epi2me_input = null
+
+    if (params.ont_data) {
+        ont_input = [
+            source: params.ont_data,
+            dest: params.ont_data_dest
+        ]
     }
 
-    // group back the possible multiple fastqs from the chunking. In
-    // a "real" workflow this wouldn't be done immediately here and
-    // we'd do something more interesting first. Note that groupTuple
-    // will give us a file list of `[null]` for missing samples, reduce
-    // this back to `null`.
-    def decorate_samples
-    if (params.wf.return_fastq || params.fastq) {
-        decorate_samples = samples
-            .map {meta, fname, stats ->
-                [meta["group_key"], meta, fname, stats]}
-            .groupTuple()
-            .map { key, metas, fnames, statss ->
-                if (fnames[0] == null) {fnames = null}
-                // put all the group_indexes into a single list for safe keeping (mainly testing)
-                [
-                    metas[0] + ["group_index":  metas.collect{it["group_index"]}],
-                    fnames, statss[0]]
-            }
-    } else {
-        decorate_samples = samples
+    if (params.epi2me_data) {
+        epi2me_input = [
+            source: params.epi2me_data,
+            dest: params.epi2me_data_dest
+        ]
     }
 
-    pipeline(decorate_samples)
-    ch_to_publish = pipeline.out.ingress_results
-        | map { [it, "${params.fastq ? "fastq" : "xam"}_ingress_results"] }
+    if (!ont_input && !epi2me_input) {
+        log.error "No input data specified. Please provide --ont_data and/or --epi2me_data"
+        exit 1
+    }
 
-    ch_to_publish | publish
+    if (ont_input && !params.ont_data_dest) {
+        log.error "ONT data destination not specified. Please provide --ont_data_dest"
+        exit 1
+    }
+
+    if (epi2me_input && !params.epi2me_data_dest) {
+        log.error "EPI2ME data destination not specified. Please provide --epi2me_data_dest"
+        exit 1
+    }
+
+    pipeline(ont_input, epi2me_input)
 }
 
 workflow.onComplete {
