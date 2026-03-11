@@ -16,7 +16,7 @@ process getVersions {
         path "versions.txt"
     script:
     """
-    echo "rsync,$(rsync --version | head -1)" >> versions.txt
+    echo 'rsync,'$(rsync --version | head -1) >> versions.txt
     """
 }
 
