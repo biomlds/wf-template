@@ -25,6 +25,10 @@ process getVersions {
     label "wfbackup"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
+    
+    input:
+        val wait_for_build
+    
     output:
         path "versions.txt"
     script:
@@ -41,6 +45,7 @@ process backupOntData {
     memory "1 GB"
 
     input:
+        val wait_for_build
         val source_path
         val dest_path
         val delete_source
@@ -108,6 +113,7 @@ process backupEpi2meData {
     memory "1 GB"
 
     input:
+        val wait_for_build
         val source_path
         val dest_path
         val delete_source
@@ -207,9 +213,9 @@ workflow pipeline {
         epi2me_data_input
 
     main:
-        buildRsyncContainer()
+        build_result = buildRsyncContainer()
         
-        software_versions = getVersions()
+        software_versions = getVersions(build_result.out.built)
         workflow_params = getParams()
 
         ont_results = null
@@ -217,6 +223,7 @@ workflow pipeline {
 
         if (ont_data_input) {
             ont_results = backupOntData(
+                build_result.out.built,
                 ont_data_input.source,
                 ont_data_input.dest,
                 params.delete_source
@@ -225,6 +232,7 @@ workflow pipeline {
 
         if (epi2me_data_input) {
             epi2me_results = backupEpi2meData(
+                build_result.out.built,
                 epi2me_data_input.source,
                 epi2me_data_input.dest,
                 params.delete_source
