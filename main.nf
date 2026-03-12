@@ -8,15 +8,19 @@ include {
 } from './lib/common'
 
 
+process buildRsyncContainer {
+    output:
+        val true, emit: built
+    
+    script:
+    """
+    docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
+    """
+}
+
+
 process getVersions {
     label "wfbackup"
-    
-    beforeScript '''
-export DOCKERFILE_PATH="${projectDir}/docker/rsync/Dockerfile"
-if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
-    docker build -t wf-rsync:latest -f $DOCKERFILE_PATH $(dirname $DOCKERFILE_PATH)
-fi
-'''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
     
@@ -37,12 +41,6 @@ process backupOntData {
         val dest_path
         val delete_source
     
-    beforeScript '''
-export DOCKERFILE_PATH="${projectDir}/docker/rsync/Dockerfile"
-if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
-    docker build -t wf-rsync:latest -f $DOCKERFILE_PATH $(dirname $DOCKERFILE_PATH)
-fi
-'''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_ont_data.json"
     cpus 1
     memory "1 GB"
@@ -111,12 +109,6 @@ process backupEpi2meData {
         val dest_path
         val delete_source
     
-    beforeScript '''
-export DOCKERFILE_PATH="${projectDir}/docker/rsync/Dockerfile"
-if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
-    docker build -t wf-rsync:latest -f $DOCKERFILE_PATH $(dirname $DOCKERFILE_PATH)
-fi
-'''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_epi2me_data.json"
     cpus 1
     memory "1 GB"
@@ -262,41 +254,48 @@ workflow pipeline {
 WorkflowMain.initialise(workflow, params, log)
 
 workflow {
-    Pinguscript.ping_start(nextflow, workflow, params)
+    if (params.build_container) {
+        // Build container only
+        Pinguscript.ping_start(nextflow, workflow, params)
+        buildRsyncContainer()
+    } else {
+        // Run normal workflow
+        Pinguscript.ping_start(nextflow, workflow, params)
 
-    def ont_input = null
-    def epi2me_input = null
+        def ont_input = null
+        def epi2me_input = null
 
-    if (params.ont_data) {
-        ont_input = [
-            source: params.ont_data,
-            dest: params.ont_data_dest
-        ]
+        if (params.ont_data) {
+            ont_input = [
+                source: params.ont_data,
+                dest: params.ont_data_dest
+            ]
+        }
+
+        if (params.epi2me_data) {
+            epi2me_input = [
+                source: params.epi2me_data,
+                dest: params.epi2me_data_dest
+            ]
+        }
+
+        if (!ont_input && !epi2me_input) {
+            log.error "No input data specified. Please provide --ont_data and/or --epi2me_data"
+            exit 1
+        }
+
+        if (ont_input && !params.ont_data_dest) {
+            log.error "ONT data destination not specified. Please provide --ont_data_dest"
+            exit 1
+        }
+
+        if (epi2me_input && !params.epi2me_data_dest) {
+            log.error "EPI2ME data destination not specified. Please provide --epi2me_data_dest"
+            exit 1
+        }
+
+        pipeline(ont_input, epi2me_input)
     }
-
-    if (params.epi2me_data) {
-        epi2me_input = [
-            source: params.epi2me_data,
-            dest: params.epi2me_data_dest
-        ]
-    }
-
-    if (!ont_input && !epi2me_input) {
-        log.error "No input data specified. Please provide --ont_data and/or --epi2me_data"
-        exit 1
-    }
-
-    if (ont_input && !params.ont_data_dest) {
-        log.error "ONT data destination not specified. Please provide --ont_data_dest"
-        exit 1
-    }
-
-    if (epi2me_input && !params.epi2me_data_dest) {
-        log.error "EPI2ME data destination not specified. Please provide --epi2me_data_dest"
-        exit 1
-    }
-
-    pipeline(ont_input, epi2me_input)
 }
 
 workflow.onComplete {
