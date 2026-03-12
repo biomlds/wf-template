@@ -212,26 +212,26 @@ workflow pipeline {
         build_result = buildRsyncContainer()
         
         // These wait for build to complete
-        software_versions = getVersions().mix(build_result.out.built)
+        software_versions = build_result.out.built | getVersions
         workflow_params = getParams()
 
         ont_results = null
         epi2me_results = null
 
         if (ont_data_input) {
-            ont_results = backupOntData(
+            ont_results = build_result.out.built | backupOntData(
                 ont_data_input.source,
                 ont_data_input.dest,
                 params.delete_source
-            ).mix(build_result.out.built)
+            )
         }
 
         if (epi2me_data_input) {
-            epi2me_results = backupEpi2meData(
+            epi2me_results = build_result.out.built | backupEpi2meData(
                 epi2me_data_input.source,
                 epi2me_data_input.dest,
                 params.delete_source
-            ).mix(build_result.out.built)
+            )
         }
 
         ont_manifest = ont_results ? ont_results.manifest : file("$projectDir/data/OPTIONAL_FILE")
