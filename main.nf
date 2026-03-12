@@ -70,11 +70,7 @@ process backupOntData {
     echo "" >> backup_ont.log
 
     echo "Step 3: Generating manifest..." >> backup_ont.log
-    echo '{"backup_type": "ont_data", "files": [ ' > manifest_ont_data.json
-    find "$dest_dir" -type f -print0 | xargs -0 md5sum | awk 'NR>1{printf ","} {printf "{\"checksum\": \"%s\", \"path\": \"%s\"}", $1, $2}' >> manifest_ont_data.json
-    echo ' ], "total_files": ' >> manifest_ont_data.json
-    find "$dest_dir" -type f | wc -l >> manifest_ont_data.json
-    echo '}' >> manifest_ont_data.json
+    generate_manifest.sh manifest_ont_data.json "ont_data" "$dest_dir"
     echo "Manifest created." >> backup_ont.log
     echo "" >> backup_ont.log
 
@@ -141,11 +137,8 @@ process backupEpi2meData {
     echo "" >> backup_epi2me.log
 
     echo "Step 3: Generating manifest..." >> backup_epi2me.log
-    echo '{"backup_type": "epi2me_data", "files": [ ' > manifest_epi2me_data.json
-    find "$dest_dir" -type f -maxdepth 1 -print0 | xargs -0 md5sum | awk 'NR>1{printf ","} {printf "{\"checksum\": \"%s\", \"path\": \"%s\"}", $1, $2}' >> manifest_epi2me_data.json
-    echo ' ], "total_files": ' >> manifest_epi2me_data.json
-    find "$dest_dir" -type f -maxdepth 1 | wc -l >> manifest_epi2me_data.json
-    echo '}' >> manifest_epi2me_data.json
+    echo "Step 3: Generating manifest..." >> backup_epi2me.log
+    generate_manifest.sh manifest_epi2me_data.json "epi2me_data" "$dest_dir" 1
     echo "Manifest created." >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
