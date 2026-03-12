@@ -30,7 +30,7 @@ process getVersions {
         path "versions.txt"
     script:
     """
-    RSYNC_VER=$(rsync --version 2>&1 | head -1)
+    RSYNC_VER=\$(rsync --version 2>&1 | head -1)
     echo "rsync,\$RSYNC_VER" >> versions.txt
     """
 }
