@@ -16,7 +16,7 @@ process getVersions {
         path "versions.txt"
     script:
     """
-    echo 'rsync,'$(rsync --version | head -1) >> versions.txt
+    rsync --version 2>&1 | head -1 | sed 's/^/rsync,/' >> versions.txt
     """
 }
 
@@ -70,14 +70,11 @@ process backupOntData {
     echo "" >> backup_ont.log
 
     echo "Step 3: Generating manifest..." >> backup_ont.log
-    find "$dest_dir" -type f -exec md5sum {} \; | awk '{print \$1, \$2}' | python3 -c '
-import sys, json
-files = []
-for line in sys.stdin:
-    checksum, path = line.strip().split(" ", 1)
-    files.append({"checksum": checksum, "path": path})
-print(json.dumps({"backup_type": "ont_data", "files": files, "total_files": len(files)}, indent=2))
-' > manifest_ont_data.json
+    echo '{"backup_type": "ont_data", "files": [ ' > manifest_ont_data.json
+    find "$dest_dir" -type f -print0 | xargs -0 md5sum | awk 'NR>1{printf ","} {printf "{\"checksum\": \"%s\", \"path\": \"%s\"}", $1, $2}' >> manifest_ont_data.json
+    echo ' ], "total_files": ' >> manifest_ont_data.json
+    find "$dest_dir" -type f | wc -l >> manifest_ont_data.json
+    echo '}' >> manifest_ont_data.json
     echo "Manifest created." >> backup_ont.log
     echo "" >> backup_ont.log
 
@@ -144,14 +141,11 @@ process backupEpi2meData {
     echo "" >> backup_epi2me.log
 
     echo "Step 3: Generating manifest..." >> backup_epi2me.log
-    find "$dest_dir" -type f -maxdepth 1 -exec md5sum {} \; | awk '{print \$1, \$2}' | python3 -c '
-import sys, json
-files = []
-for line in sys.stdin:
-    checksum, path = line.strip().split(" ", 1)
-    files.append({"checksum": checksum, "path": path})
-print(json.dumps({"backup_type": "epi2me_data", "files": files, "total_files": len(files)}, indent=2))
-' > manifest_epi2me_data.json
+    echo '{"backup_type": "epi2me_data", "files": [ ' > manifest_epi2me_data.json
+    find "$dest_dir" -type f -maxdepth 1 -print0 | xargs -0 md5sum | awk 'NR>1{printf ","} {printf "{\"checksum\": \"%s\", \"path\": \"%s\"}", $1, $2}' >> manifest_epi2me_data.json
+    echo ' ], "total_files": ' >> manifest_epi2me_data.json
+    find "$dest_dir" -type f -maxdepth 1 | wc -l >> manifest_epi2me_data.json
+    echo '}' >> manifest_epi2me_data.json
     echo "Manifest created." >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
