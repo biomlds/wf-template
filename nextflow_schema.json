@@ -53,6 +53,12 @@
             "fa_icon": "fas fa-cog",
             "description": "Options for backup behavior.",
             "properties": {
+                "build_container": {
+                    "type": "boolean",
+                    "default": true,
+                    "title": "Build rsync container",
+                    "description": "Build the rsync Docker container. Set to false to run the backup workflow."
+                },
                 "delete_source": {
                     "type": "boolean",
                     "default": false,
