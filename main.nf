@@ -8,26 +8,15 @@ include {
 } from './lib/common'
 
 
-process buildRsyncContainer {
-    cpus 1
-    
-    output:
-        val true, emit: built
-    
-    script:
-    """
-    docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
-    """
-}
-
-
 process getVersions {
     label "wfbackup"
+    beforeScript '''
+    if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
+        docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
+    fi
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
-    
-    input:
-        val wait_for_build
     
     output:
         path "versions.txt"
@@ -40,12 +29,16 @@ process getVersions {
 
 process backupOntData {
     label "wfbackup"
+    beforeScript '''
+    if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
+        docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
+    fi
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_ont_data.json"
     cpus 1
     memory "1 GB"
 
     input:
-        val wait_for_build
         val source_path
         val dest_path
         val delete_source
@@ -108,12 +101,16 @@ process backupOntData {
 
 process backupEpi2meData {
     label "wfbackup"
+    beforeScript '''
+    if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
+        docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
+    fi
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_epi2me_data.json"
     cpus 1
     memory "1 GB"
 
     input:
-        val wait_for_build
         val source_path
         val dest_path
         val delete_source
@@ -213,9 +210,7 @@ workflow pipeline {
         epi2me_data_input
 
     main:
-        build_result = buildRsyncContainer()
-        
-        software_versions = getVersions(build_result.out.built.collect())
+        software_versions = getVersions()
         workflow_params = getParams()
 
         ont_results = null
@@ -223,7 +218,6 @@ workflow pipeline {
 
         if (ont_data_input) {
             ont_results = backupOntData(
-                build_result.out.built.collect(),
                 ont_data_input.source,
                 ont_data_input.dest,
                 params.delete_source
@@ -232,7 +226,6 @@ workflow pipeline {
 
         if (epi2me_data_input) {
             epi2me_results = backupEpi2meData(
-                build_result.out.built.collect(),
                 epi2me_data_input.source,
                 epi2me_data_input.dest,
                 params.delete_source
