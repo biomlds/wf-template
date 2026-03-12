@@ -13,11 +13,11 @@ process getVersions {
     input:
         val dockerfile_path
     
-    beforeScript """
+    beforeScript '''
     if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
         docker build -t wf-rsync:latest -f $dockerfile_path $(dirname $dockerfile_path)
     fi
-    """
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
     
@@ -38,11 +38,11 @@ process backupOntData {
         val dest_path
         val delete_source
     
-    beforeScript """
+    beforeScript '''
     if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
         docker build -t wf-rsync:latest -f $dockerfile_path $(dirname $dockerfile_path)
     fi
-    """
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_ont_data.json"
     cpus 1
     memory "1 GB"
@@ -111,11 +111,11 @@ process backupEpi2meData {
         val dest_path
         val delete_source
     
-    beforeScript """
+    beforeScript '''
     if ! docker image inspect wf-rsync:latest > /dev/null 2>&1; then
         docker build -t wf-rsync:latest -f $dockerfile_path $(dirname $dockerfile_path)
     fi
-    """
+    '''
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_epi2me_data.json"
     cpus 1
     memory "1 GB"
