@@ -9,7 +9,6 @@ include {
 
 
 process buildRsyncContainer {
-    label "wfbackup"
     cpus 1
     
     output:
