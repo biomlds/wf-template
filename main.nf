@@ -8,6 +8,20 @@ include {
 } from './lib/common'
 
 
+process buildRsyncContainer {
+    label "wfbackup"
+    cpus 1
+    
+    output:
+        val true, emit: built
+    
+    script:
+    """
+    docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
+    """
+}
+
+
 process getVersions {
     label "wfbackup"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
@@ -194,6 +208,8 @@ workflow pipeline {
         epi2me_data_input
 
     main:
+        buildRsyncContainer()
+        
         software_versions = getVersions()
         workflow_params = getParams()
 
