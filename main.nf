@@ -59,6 +59,7 @@ process backupOntData {
     script:
     String src = "/home/source"
     String dst = "/home/dest/ont_data"
+    String do_delete = delete_source ? "true" : "false"
     """
     mkdir -p "$dst"
 
@@ -83,9 +84,13 @@ process backupOntData {
     echo "Manifest created." >> backup_ont.log
     echo "" >> backup_ont.log
 
-    echo "Step 3: Deleting source files..." >> backup_ont.log
-    rm -rf "$src"
-    echo "Source files deleted." >> backup_ont.log
+    if [ "$do_delete" = "true" ]; then
+        echo "Step 3: Deleting source files..." >> backup_ont.log
+        rm -rf "$src"
+        echo "Source files deleted." >> backup_ont.log
+    else
+        echo "Step 3: Source files retained (delete_source=false)." >> backup_ont.log
+    fi
 
     echo "ONT backup completed successfully!" >> backup_ont.log
     """
@@ -115,6 +120,7 @@ process backupEpi2meData {
     script:
     String src = "/home/source"
     String dst = "/home/dest/epi2me_data"
+    String do_delete = delete_source ? "true" : "false"
     """
     mkdir -p "$dst"
 
@@ -139,9 +145,13 @@ process backupEpi2meData {
     echo "Manifest created." >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
-    echo "Step 3: Deleting source files (backup verified)..." >> backup_epi2me.log
-    rm -rf "$src"
-    echo "Source files deleted." >> backup_epi2me.log
+    if [ "$do_delete" = "true" ]; then
+        echo "Step 3: Deleting source files (backup verified)..." >> backup_epi2me.log
+        rm -rf "$src"
+        echo "Source files deleted." >> backup_epi2me.log
+    else
+        echo "Step 3: Source files retained (delete_source=false)." >> backup_epi2me.log
+    fi
 
     echo "EPI2ME backup completed successfully!" >> backup_epi2me.log
     """
@@ -202,7 +212,7 @@ workflow pipeline {
                 build_done,
                 ont_data_input.source,
                 ont_data_input.dest,
-                params.delete_source
+                params.backup_options.delete_source
             )
         }
 
@@ -211,7 +221,7 @@ workflow pipeline {
                 build_done,
                 epi2me_data_input.source,
                 epi2me_data_input.dest,
-                params.delete_source
+                params.backup_options.delete_source
             )
         }
 
