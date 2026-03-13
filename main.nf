@@ -184,10 +184,10 @@ process makeReport {
     label "wf_common"
     publishDir "${params.out_dir}", mode: 'copy', pattern: "wf-backup-report.html"
     input:
-        path ont_manifest, optional: true
-        path epi2me_manifest, optional: true
-        path ont_log, optional: true
-        path epi2me_log, optional: true
+        path ont_manifest
+        path epi2me_manifest
+        path ont_log
+        path epi2me_log
         path "versions/*"
         path "params.json"
         val wf_version
@@ -247,20 +247,23 @@ workflow pipeline {
             )
         }
 
-        ont_manifest = ont_results ? ont_results.manifest : null
-        epi2me_manifest = epi2me_results ? epi2me_results.manifest : null
-        ont_log = ont_results ? ont_results.log : null
-        epi2me_log = epi2me_results ? epi2me_results.log : null
+        ont_manifest = ont_results ? ont_results.manifest : file("$projectDir/data/OPTIONAL_ONT")
+        epi2me_manifest = epi2me_results ? epi2me_results.manifest : file("$projectDir/data/OPTIONAL_EPI2ME")
+        ont_log = ont_results ? ont_results.log : file("$projectDir/data/OPTIONAL_ONT")
+        epi2me_log = epi2me_results ? epi2me_results.log : file("$projectDir/data/OPTIONAL_EPI2ME")
 
-        report = makeReport(
-            ont_manifest,
-            epi2me_manifest,
-            ont_log,
-            epi2me_log,
-            software_versions,
-            workflow_params,
-            workflow.manifest.version
-        )
+        report = null
+        if (ont_results || epi2me_results) {
+            report = makeReport(
+                ont_manifest,
+                epi2me_manifest,
+                ont_log,
+                epi2me_log,
+                software_versions,
+                workflow_params,
+                workflow.manifest.version
+            )
+        }
 
     emit:
         report
