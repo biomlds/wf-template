@@ -11,7 +11,7 @@ include {
 process buildRsyncContainer {
     output:
         val true, emit: built
-    
+
     script:
     """
     docker build -t wf-rsync:latest -f ${projectDir}/docker/rsync/Dockerfile ${projectDir}/docker/rsync/
@@ -25,7 +25,7 @@ process getVersions {
         val build_done
     publishDir "${params.out_dir}", mode: 'copy', pattern: "versions.txt"
     cpus 1
-    
+
     output:
         path "versions.txt"
     script:
@@ -38,15 +38,15 @@ process getVersions {
 
 process backupOntData {
     label "wfbackup"
-    
-    containerOptions { "-v ${source_path}:/home/wfrsync/source -v ${dest_path}:/home/wfrsync/dest" }
-    
+
+    containerOptions { "-v ${source_path}:/home/source -v ${dest_path}:/home/dest" }
+
     input:
         val build_done
         val source_path
         val dest_path
         val delete_source
-    
+
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_ont_data.json"
     cpus 1
     memory "1 GB"
@@ -57,8 +57,8 @@ process backupOntData {
         val true, emit: success
 
     script:
-    String src = "/home/wfrsync/source"
-    String dst = "/home/wfrsync/dest/ont_data"
+    String src = "/home/source"
+    String dst = "/home/dest/ont_data"
     """
     mkdir -p "$dst"
 
@@ -110,15 +110,15 @@ process backupOntData {
 
 process backupEpi2meData {
     label "wfbackup"
-    
-    containerOptions { "-v ${source_path}:/home/wfrsync/source -v ${dest_path}:/home/wfrsync/dest" }
-    
+
+    containerOptions { "-v ${source_path}:/home/source -v ${dest_path}:/home/dest" }
+
     input:
         val build_done
         val source_path
         val dest_path
         val delete_source
-    
+
     publishDir "${params.out_dir}", mode: 'copy', pattern: "manifest_epi2me_data.json"
     cpus 1
     memory "1 GB"
@@ -129,8 +129,8 @@ process backupEpi2meData {
         val true, emit: success
 
     script:
-    String src = "/home/wfrsync/source"
-    String dst = "/home/wfrsync/dest/epi2me_data"
+    String src = "/home/source"
+    String dst = "/home/dest/epi2me_data"
     """
     mkdir -p "$dst"
 
@@ -221,7 +221,7 @@ workflow pipeline {
     main:
         // Build container - returns channel
         build_done = buildRsyncContainer()
-        
+
         // These receive the build_done channel - creates dependency
         software_versions = getVersions(build_done)
         workflow_params = getParams()
