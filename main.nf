@@ -67,41 +67,25 @@ process backupOntData {
     echo "Destination: $dst" >> backup_ont.log
     echo "" >> backup_ont.log
 
-    echo "Step 1: Initial rsync copy (excluding pod5)..." >> backup_ont.log
-    rsync -av --no-owner --no-group --numeric-ids --exclude='pod5' "$src/" "$dst/" >> backup_ont.log 2>&1
-    RSYNC_INIT_EXIT=\$?
+    echo "Step 1: Verification and copy rsync (excluding pod5)..." >> backup_ont.log
+    rsync -avc --no-owner --no-group --numeric-ids --checksum --exclude='pod5' "$src/" "$dst/" >> backup_ont.log 2>&1
+    RSYNC_EXIT=\$?
 
-    if [ \$RSYNC_INIT_EXIT -ne 0 ]; then
-        echo "ERROR: Initial rsync failed with exit code \$RSYNC_INIT_EXIT" >> backup_ont.log
+    if [ \$RSYNC_EXIT -ne 0 ]; then
+        echo "ERROR: rsync failed with exit code \$RSYNC_EXIT" >> backup_ont.log
         exit 1
     fi
-    echo "Initial copy completed successfully." >> backup_ont.log
+    echo "rsync completed successfully." >> backup_ont.log
     echo "" >> backup_ont.log
 
-    echo "Step 2: Verification rsync with checksum..." >> backup_ont.log
-    rsync -avc --no-owner --no-group --numeric-ids --checksum "$src/" "$dst/" >> backup_ont.log 2>&1
-    RSYNC_VERIFY_EXIT=\$?
-
-    if [ \$RSYNC_VERIFY_EXIT -ne 0 ]; then
-        echo "ERROR: Verification rsync failed with exit code \$RSYNC_VERIFY_EXIT" >> backup_ont.log
-        exit 1
-    fi
-    echo "Verification completed successfully." >> backup_ont.log
-    echo "" >> backup_ont.log
-
-    echo "Step 3: Generating manifest..." >> backup_ont.log
+    echo "Step 2: Generating manifest..." >> backup_ont.log
     generate_manifest.sh manifest_ont_data.json "ont_data" "$dst"
     echo "Manifest created." >> backup_ont.log
     echo "" >> backup_ont.log
 
-    if [ "$delete_source" = "true" ]; then
-        echo "Step 4: Deleting source files (backup verified)..." >> backup_ont.log
-        rsync -av --no-owner --no-group --numeric-ids --exclude='pod5' --delete "$src/" /tmp/ont_backup_temp/ >> backup_ont.log 2>&1
-        rm -rf "$src"
-        echo "Source files deleted." >> backup_ont.log
-    else
-        echo "Step 4: Skipping source deletion (delete_source=false)." >> backup_ont.log
-    fi
+    echo "Step 3: Deleting source files..." >> backup_ont.log
+    rm -rf "$src"
+    echo "Source files deleted." >> backup_ont.log
 
     echo "ONT backup completed successfully!" >> backup_ont.log
     """
@@ -133,70 +117,31 @@ process backupEpi2meData {
     String dst = "/home/dest/epi2me_data"
     """
     mkdir -p "$dst"
-    mkdir -p "$dst/output"
 
     echo "Starting EPI2ME data backup..." > backup_epi2me.log
     echo "Source: $source_path" >> backup_epi2me.log
     echo "Destination: $dst" >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
-    echo "Step 1a: Initial rsync copy (source root, first-level files only)..." >> backup_epi2me.log
-    rsync -av --no-owner --no-group --numeric-ids --include='*' --exclude='*/*' "$src/" "$dst/" >> backup_epi2me.log 2>&1
-    RSYNC_INIT_EXIT=\$?
+    echo "Step 1: Verification and copy rsync (full recursive)..." >> backup_epi2me.log
+    rsync -avc --no-owner --no-group --numeric-ids --checksum "$src/" "$dst/" >> backup_epi2me.log 2>&1
+    RSYNC_EXIT=\$?
 
-    if [ \$RSYNC_INIT_EXIT -ne 0 ]; then
-        echo "ERROR: Initial rsync (source root) failed with exit code \$RSYNC_INIT_EXIT" >> backup_epi2me.log
+    if [ \$RSYNC_EXIT -ne 0 ]; then
+        echo "ERROR: rsync failed with exit code \$RSYNC_EXIT" >> backup_epi2me.log
         exit 1
     fi
-    echo "Initial copy (source root) completed successfully." >> backup_epi2me.log
+    echo "rsync completed successfully." >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
-    echo "Step 1b: Initial rsync copy (output folder, first-level files only)..." >> backup_epi2me.log
-    rsync -av --no-owner --no-group --numeric-ids --exclude='*/' "$src/output/" "$dst/output/" >> backup_epi2me.log 2>&1
-    RSYNC_INIT_EXIT2=\$?
-
-    if [ \$RSYNC_INIT_EXIT2 -ne 0 ]; then
-        echo "ERROR: Initial rsync (output folder) failed with exit code \$RSYNC_INIT_EXIT2" >> backup_epi2me.log
-        exit 1
-    fi
-    echo "Initial copy (output folder) completed successfully." >> backup_epi2me.log
-    echo "" >> backup_epi2me.log
-
-    echo "Step 2a: Verification rsync with checksum (source root)..." >> backup_epi2me.log
-    rsync -avc --no-owner --no-group --numeric-ids --checksum --include='*' --exclude='*/*' "$src/" "$dst/" >> backup_epi2me.log 2>&1
-    RSYNC_VERIFY_EXIT=\$?
-
-    if [ \$RSYNC_VERIFY_EXIT -ne 0 ]; then
-        echo "ERROR: Verification rsync (source root) failed with exit code \$RSYNC_VERIFY_EXIT" >> backup_epi2me.log
-        exit 1
-    fi
-    echo "Verification (source root) completed successfully." >> backup_epi2me.log
-    echo "" >> backup_epi2me.log
-
-    echo "Step 2b: Verification rsync with checksum (output folder)..." >> backup_epi2me.log
-    rsync -avc --no-owner --no-group --numeric-ids --checksum --exclude='*/' "$src/output/" "$dst/output/" >> backup_epi2me.log 2>&1
-    RSYNC_VERIFY_EXIT2=\$?
-
-    if [ \$RSYNC_VERIFY_EXIT2 -ne 0 ]; then
-        echo "ERROR: Verification rsync (output folder) failed with exit code \$RSYNC_VERIFY_EXIT2" >> backup_epi2me.log
-        exit 1
-    fi
-    echo "Verification (output folder) completed successfully." >> backup_epi2me.log
-    echo "" >> backup_epi2me.log
-
-    echo "Step 3: Generating manifest..." >> backup_epi2me.log
+    echo "Step 2: Generating manifest..." >> backup_epi2me.log
     generate_manifest.sh manifest_epi2me_data.json "epi2me_data" "$dst" 1
     echo "Manifest created." >> backup_epi2me.log
     echo "" >> backup_epi2me.log
 
-    if [ "$delete_source" = "true" ]; then
-        echo "Step 4: Deleting source files (backup verified)..." >> backup_epi2me.log
-        rsync -av --no-owner --no-group --numeric-ids --include='*' --exclude='*/*' --delete "$src/" /tmp/epi2me_backup_temp/ >> backup_epi2me.log 2>&1
-        rm -rf "$src"
-        echo "Source files deleted." >> backup_epi2me.log
-    else
-        echo "Step 4: Skipping source deletion (delete_source=false)." >> backup_epi2me.log
-    fi
+    echo "Step 3: Deleting source files (backup verified)..." >> backup_epi2me.log
+    rm -rf "$src"
+    echo "Source files deleted." >> backup_epi2me.log
 
     echo "EPI2ME backup completed successfully!" >> backup_epi2me.log
     """
