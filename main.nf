@@ -129,8 +129,8 @@ process backupEpi2meData {
         val true, emit: success
 
     script:
-    String src = "/home/wfrsync/source"
-    String dst = "/home/wfrsync/dest/epi2me_data"
+    String src = "/home//source"
+    String dst = "/home//dest/epi2me_data"
     """
     mkdir -p "$dst"
     mkdir -p "$dst/output"
